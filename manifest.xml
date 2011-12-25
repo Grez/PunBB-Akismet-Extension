@@ -146,7 +146,7 @@
 		</hook>
 		<hook id="ca_fn_generate_admin_menu_new_sublink"><![CDATA[
 			if (FORUM_PAGE_SECTION == 'management')
-				$forum_page['admin_submenu']['akismet'] = '<li class="'.((FORUM_PAGE == 'akismet') ? 'active' : 'normal').((empty($forum_page['admin_submenu'])) ? ' first-item' : '').'"><a href="'.forum_link($forum_url['akismet']).'">Akismet</a></li>';
+				$forum_page['admin_submenu']['akismet'] = '<li class="'.((FORUM_PAGE == 'admin-akismet') ? 'active' : 'normal').((empty($forum_page['admin_submenu'])) ? ' first-item' : '').'"><a href="'.forum_link($forum_url['akismet']).'">Akismet</a></li>';
 			]]>
 		</hook>
 		<hook id="co_modify_url_scheme">
@@ -268,7 +268,7 @@
 				'FROM'		=> 'posts AS s',
 				'WHERE'		=> 's.is_spam = \'1\' && topic_id='.$topic_id,
 			);
-			$akresult =$forum_db->query_build($akismetquery) or error(__FILE__, __LINE__);
+			$akresult = $forum_db->query_build($akismetquery) or error(__FILE__, __LINE__);
 			list($akismet_spams) = $forum_db->fetch_row($akresult);
 			$forum_db->query('UPDATE '.$forum_db->prefix.'config SET conf_value=conf_value+'.$akismet_spams.' where conf_name=\'o_akismet_spam_count\' limit 1');
 			]]>
@@ -280,7 +280,7 @@
 				'FROM'		=> 'posts AS s',
 				'WHERE'		=> 's.is_spam = \'1\' && s.id IN('.implode(',', $posts).')'
 			);
-			$akresult =$forum_db->query_build($akismetquery) or error(__FILE__, __LINE__);
+			$akresult = $forum_db->query_build($akismetquery) or error(__FILE__, __LINE__);
 			list($akismet_spams) = $forum_db->fetch_row($akresult);
 			$forum_db->query('UPDATE '.$forum_db->prefix.'config SET conf_value=conf_value+'.$akismet_spams.' where conf_name=\'o_akismet_spam_count\' limit 1');
 			]]>

@@ -27,7 +27,7 @@ $forum_page['crumbs'] = array(
     array('Akismet', forum_link($forum_url['akismet']))
 );
 
-require_once  $ext_info['path'].'/akismet.php5.class.php';
+require_once $ext_info['path'].'/akismet.php5.class.php';
 
 $forum_page['form_action']=forum_link($forum_url['akismet']);
 
