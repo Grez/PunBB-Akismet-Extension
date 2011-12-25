@@ -57,12 +57,8 @@
 			$post_is_spam = false;
 
 			if($forum_config['o_akismet'] == 1 and !empty($forum_config['o_akismet_key'])){
-				if(version_compare("5", phpversion(), "<="))
-					require_once  $ext_info['path'].'/akismet.php5.class.php';
-				elseif(version_compare("5", phpversion(), ">"))
-					require_once  $ext_info['path'].'/akismet.php4.class.php';
-				else
-					die("PHP 4 or greater is needed for Akismet extension.");
+				require_once  $ext_info['path'].'/akismet.php5.class.php';
+				
 				if(($forum_user['is_guest'] || $forum_user['num_posts'] < $forum_config['o_akismet_member_posts']) && !$forum_user['is_admmod']){
 
 					//Create Akismet object
