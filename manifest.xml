@@ -1,0 +1,289 @@
+<?xml version="1.0" encoding="utf-8"?>
+<extension engine="1.0">
+	<id>akismet</id>
+	<title>Akismet</title>
+	<version>2.1</version>
+	<description>Integrates Akismet spam protection into the forum. Based on code by Garciat</description>
+	<author>Rich Pedley</author>
+	<minversion>1.3</minversion>
+	<maxtestedon>1.3</maxtestedon>
+	
+	<install>
+		<![CDATA[
+		//test with username: viagra-test-123
+		//Insert config values
+		$new_config = array(
+			'o_akismet'		=> '0',
+			'o_akismet_member_posts'	=> '10',
+			'o_akismet_spam_count'		=> '0',
+			'o_akismet_ham_count'		=> '0',
+			'o_akismet_ban_time'		=> '1',
+			'o_akismet_key'	=> ''
+		);
+		foreach($new_config as $key => $value){
+			if (!isset($forum_config[$key])){
+				$query = array(
+					'INSERT'	=> 'conf_name, conf_value',
+					'INTO'		=> 'config',
+					'VALUES'	=> '\''.$key.'\', \''.$value.'\''
+				);
+				$forum_db->query_build($query) or error(__FILE__, __LINE__);
+			}
+		}
+		$forum_db->add_field('posts', 'is_spam', 'TINYINT(1) UNSIGNED', true, '0');
+		]]>
+	</install>
+	
+	<uninstall>
+		<![CDATA[
+		$query = array(
+			'DELETE'	=> 'config',
+			'WHERE'		=> 'conf_name in (\'o_akismet\', \'o_akismet_key\',\'o_akismet_spam_count\',\'o_akismet_ham_count\',\'o_akismet_ban_time\')',
+		);
+		$forum_db->query_build($query) or error(__FILE__, __LINE__);
+
+		$forum_db->drop_field('posts', 'is_spam');
+		]]>
+	</uninstall>
+	
+	<hooks>
+		<hook id="po_end_validation">
+			<![CDATA[
+			if (file_exists($ext_info['path'].'/lang/'.$forum_user['language'].'/'.$ext_info['id'].'.php'))
+				include $ext_info['path'].'/lang/'.$forum_user['language'].'/'.$ext_info['id'].'.php';
+			else
+				include $ext_info['path'].'/lang/English/akismet.php';
+
+			$post_is_spam = false;
+
+			if($forum_config['o_akismet'] == 1 and !empty($forum_config['o_akismet_key'])){
+				if(version_compare("5", phpversion(), "<="))
+					require_once  $ext_info['path'].'/akismet.php5.class.php';
+				elseif(version_compare("5", phpversion(), ">"))
+					require_once  $ext_info['path'].'/akismet.php4.class.php';
+				else
+					die("PHP 4 or greater is needed for Akismet extension.");
+				if(($forum_user['is_guest'] || $forum_user['num_posts'] < $forum_config['o_akismet_member_posts']) && !$forum_user['is_admmod']){
+
+					//Create Akismet object
+					$akismet = new Akismet($base_url, $forum_config['o_akismet_key']);
+					//Set vars into object
+					$akismet->setCommentAuthor($username);
+					$akismet->setCommentAuthorEmail($email);
+					$akismet->setCommentContent($message);
+					$akismet->setCommentType('punbb');
+					if($akismet->isCommentSpam()){
+						//oh, it's spam! lets ban this dude! >:)
+						$email_sql = ($forum_config['p_force_guest_email'] == '1' || $email != '') ? '\''.$email.'\'' : 'NULL';
+						switch($forum_config['o_akismet_ban_time']){
+							case '4':
+								$ban_expire = mktime(0, 0, 0, date("m"), date("d")+7, date("Y"));
+								break;
+							case '3':
+								$ban_expire = mktime(0, 0, 0, date("m")+1, date("d"), date("Y"));
+								break;
+							case '2':
+								$ban_expire = mktime(0, 0, 0, date("m")+3, date("d"), date("Y"));
+								break;
+							case '1':
+							default:
+								$ban_expire = 'NULL';
+								break;
+						}
+						$ban_user = '\''.$forum_db->escape($username).'\'';
+						$ban_ip = '\''.$forum_db->escape(get_remote_address()).'\'';
+						$ban_email = '\''.$forum_db->escape($email_sql).'\'';
+						$ban_message = '\''.$forum_db->escape("Banned by Akismet").'\'';
+						$ban_creator = '\'0\'';
+						$forum_db->query('INSERT INTO '.$forum_db->prefix.'bans (username, ip, email, message, expire, ban_creator) VALUES('.$ban_user.', '.$ban_ip.', '.$ban_email.', '.$ban_message.', '.$ban_expire.', '.$ban_creator.')') or error('Unable to add ban', __FILE__, __LINE__, $forum_db->error());
+						// Regenerate the bans cache
+						require_once FORUM_ROOT.'include/cache.php';
+						generate_bans_cache();
+						$post_is_spam = true;
+					}
+				}
+			}
+			]]>
+		</hook>
+		<hook id="po_pre_add_post, po_pre_add_topic">
+			<![CDATA[
+			if($post_is_spam)
+				$post_info['is_spam'] = '1';
+			]]>
+		</hook>
+		<hook id="po_pre_redirect">
+			<![CDATA[
+			if($post_is_spam)
+				$lang_post['Post redirect'] = $lang_akismet['Post redirect'];
+			]]>
+		</hook>
+		<hook id="fn_add_post_qr_add_post, fn_add_topic_qr_add_topic_post">
+			<![CDATA[
+			global $post_is_spam;
+			if($post_is_spam){
+				$query['INSERT'] .= ', is_spam';
+				$query['VALUES'] .= ', \'1\'';
+			}
+			]]>
+		</hook>
+		<hook id="hd_alert">
+			<![CDATA[
+			$query = array(
+			'SELECT'	=> 'COUNT(s.id)',
+			'FROM'		=> 'posts AS s',
+			'WHERE'		=> 's.is_spam = "1"',
+			);
+			$result_spam = $forum_db->query_build($query) or error(__FILE__, __LINE__);
+			if ($forum_db->result($result_spam))
+				$admod_links['spam'] = '<span id="spam"><a href="'.forum_link($forum_url['akismet']).'">Spam</a></span>';
+			]]>
+		</hook>
+		<hook id="aop_setup_validation">
+			<![CDATA[
+			if (!isset($form['akismet']) || $form['akismet'] != '1')
+				$form['akismet'] = '0';
+			]]>
+		</hook>
+		<hook id="ca_fn_generate_admin_menu_new_sublink"><![CDATA[
+			if (FORUM_PAGE_SECTION == 'management')
+				$forum_page['admin_submenu']['akismet'] = '<li class="'.((FORUM_PAGE == 'akismet') ? 'active' : 'normal').((empty($forum_page['admin_submenu'])) ? ' first-item' : '').'"><a href="'.forum_link($forum_url['akismet']).'">Akismet</a></li>';
+			]]>
+		</hook>
+		<hook id="co_modify_url_scheme">
+			<![CDATA[
+			$forum_url['akismet'] = 'extensions/akismet/akismet.php';
+			$forum_url['spam'] = 'extensions/akismet/akismet.php?id=$1&amp;topic=$2';
+			]]>
+		</hook>
+		
+		<hook id="aop_setup_personal_fieldset_end">
+			<![CDATA[
+			if (file_exists($ext_info['path'].'/lang/'.$forum_user['language'].'/'.$ext_info['id'].'.php'))
+				include $ext_info['path'].'/lang/'.$forum_user['language'].'/'.$ext_info['id'].'.php';
+			else
+				include $ext_info['path'].'/lang/English/akismet.php';
+
+			$forum_page['group_count'] = $forum_page['item_count'] = 0;
+			?>
+			<div class="content-head">
+				<h2 class="hn"><span><?php echo $lang_akismet['Setup'] ?></span></h2>
+			</div>
+			<fieldset class="frm-group group<?php echo ++$forum_page['group_count'] ?>">
+				<legend class="group-legend"><strong><?php echo $lang_akismet['Setup'] ?></strong></legend>
+				<div class="sf-set set<?php echo ++$forum_page['item_count'] ?>">
+					<div class="sf-box checkbox">
+						<label for="fld<?php echo $forum_page['fld_count'] ?>">
+							<span><?php echo $lang_akismet['Enable'] ?></span>
+						</label>
+						<span class="fld-input"><input type="checkbox" id="fld<?php echo ++$forum_page['fld_count'] ?>" name="form[akismet]" value="1" <?php if ($forum_config['o_akismet'] == 1) echo 'checked="checked" ' ?>/></span>
+					</div>
+				</div>
+				<div class="sf-set set<?php echo ++$forum_page['item_count'] ?>">
+					<div class="sf-box text">
+						<label for="fld<?php echo ++$forum_page['fld_count'] ?>">
+							<span><?php echo $lang_akismet['Key'] ?></span>
+							<small><?php echo $lang_akismet['Key help'] ?></small>
+						</label><br />
+						<span class="fld-input"><input type="text" id="fld<?php echo $forum_page['fld_count'] ?>" name="form[akismet_key]" size="16" maxlength="255" value="<?php echo forum_htmlencode($forum_config['o_akismet_key']) ?>" /></span>
+					</div>
+				</div>
+				<div class="sf-set set<?php echo ++$forum_page['item_count'] ?>">
+					<div class="sf-box select">
+						<label for="fld<?php echo ++$forum_page['fld_count'] ?>"><span><?php echo $lang_akismet['Ban Time'] ?></span><small><?php echo $lang_akismet['Ban Time Help'] ?></small></label><br />
+						<span class="fld-input"><select id="fld<?php echo $forum_page['fld_count'] ?>" name="form[akismet_ban_time]">
+							<option value="4"<?php if ($forum_config['o_akismet_ban_time'] == '4') echo ' selected="selected"' ?>><?php echo '1 week'; ?></option>
+							<option value="3"<?php if ($forum_config['o_akismet_ban_time'] == '3') echo ' selected="selected"' ?>><?php echo '1 month'; ?></option>
+							<option value="2"<?php if ($forum_config['o_akismet_ban_time'] == '2') echo ' selected="selected"' ?>><?php echo '3 months'; ?></option>
+							<option value="1"<?php if ($forum_config['o_akismet_ban_time'] == '1') echo ' selected="selected"' ?>><?php echo 'Forever'; ?></option>
+						</select></span>
+					</div>
+				</div>
+				<div class="sf-set set<?php echo ++$forum_page['item_count'] ?>">
+					<div class="sf-box text">
+						<label for="fld<?php echo ++$forum_page['fld_count'] ?>"><span><?php echo $lang_akismet['Member Min posts'] ?></span><small><?php echo $lang_akismet['Member Min posts help'] ?></small></label><br />
+						<span class="fld-input"><input type="text" id="fld<?php echo $forum_page['fld_count'] ?>" name="form[akismet_member_posts]" size="3" maxlength="3" value="<?php echo $forum_config['o_akismet_member_posts'] ?>" /></span>
+					</div>
+				</div>
+				
+			</fieldset>
+			<?php
+			]]>
+		</hook>
+		<hook id="vt_qr_get_posts, mr_post_actions_qr_get_posts">
+			<![CDATA[
+				//checking for spam
+				$query['SELECT'] .= ', p.is_spam';
+			]]>
+		</hook>
+		<hook id="vt_row_pre_post_actions_merge">
+		<![CDATA[
+			//hides post and quote button
+			if (file_exists($ext_info['path'].'/lang/'.$forum_user['language'].'/'.$ext_info['id'].'.php'))
+				include $ext_info['path'].'/lang/'.$forum_user['language'].'/'.$ext_info['id'].'.php';
+			else
+				include $ext_info['path'].'/lang/English/akismet.php';
+			if ($forum_user['is_admmod'] && $cur_post['is_spam']=='1'){
+				$cur_post['message'] = $lang_akismet['Admmod message']."\n\n".$cur_post['message'];
+				unset($forum_page['post_actions']['quote']);
+				$forum_page['post_actions']['spam'] = '<span class="spam-post'.(!empty($forum_page['post_actions']) ? ' first-item' : '').'"><a href="'.forum_link($forum_url['spam'], array($cur_post['id'],$id)).'">'.$lang_akismet['Not spam'].'<span> '.$lang_topic['Post'].' '.forum_number_format($forum_page['start_from'] + $forum_page['item_count']).'</span></a></span>';
+			}elseif($cur_post['is_spam']=='1'){
+				$cur_post['message'] = $lang_akismet['General message'];
+				unset($forum_page['post_actions']['quote']);
+			}	
+			if ($forum_user['is_admmod'] && $cur_post['is_spam']=='0'){
+				$forum_page['post_actions']['spam'] = '<span class="spam-post'.(!empty($forum_page['post_actions']) ? ' first-item' : '').'"><a href="'.forum_link($forum_url['spam'], array($cur_post['id'],$id)).'">'.$lang_akismet['Mark Spam'].'<span> '.$lang_topic['Post'].' '.forum_number_format($forum_page['start_from'] + $forum_page['item_count']).'</span></a></span>';
+			}
+			]]>
+		</hook>
+		<hook id="mr_post_actions_loop_start">
+		<![CDATA[
+			//hides post and quote button
+			if (file_exists($ext_info['path'].'/lang/'.$forum_user['language'].'/'.$ext_info['id'].'.php'))
+				include $ext_info['path'].'/lang/'.$forum_user['language'].'/'.$ext_info['id'].'.php';
+			else
+				include $ext_info['path'].'/lang/English/akismet.php';
+			if ($forum_user['is_admmod'] && $cur_post['is_spam']=='1'){
+				$cur_post['message'] = $lang_akismet['Admmod message']."\n\n".$cur_post['message'];
+			}
+			]]>
+		</hook>
+		<hook id="fn_delete_post_qr_delete_post">
+			<![CDATA[
+			$akismetquery = array(
+				'SELECT'	=> 'is_spam',
+				'FROM'		=> 'posts',
+				'WHERE'		=> 'id='.$post_id,
+				'LIMIT'		=> '1'
+			);
+			$akresult = $forum_db->query_build($akismetquery) or error(__FILE__, __LINE__);
+			list($is_spam) = $forum_db->fetch_row($akresult);
+			if($is_spam=='1')
+				$forum_db->query('UPDATE '.$forum_db->prefix.'config SET conf_value=conf_value+1 where conf_name=\'o_akismet_spam_count\' limit 1');
+			]]>
+		</hook>
+		<hook id="fn_delete_topic_qr_delete_topic_posts">
+			<![CDATA[
+			$akismetquery = array(
+				'SELECT'	=> 'COUNT(s.id)',
+				'FROM'		=> 'posts AS s',
+				'WHERE'		=> 's.is_spam = \'1\' && topic_id='.$topic_id,
+			);
+			$akresult =$forum_db->query_build($akismetquery) or error(__FILE__, __LINE__);
+			list($akismet_spams) = $forum_db->fetch_row($akresult);
+			$forum_db->query('UPDATE '.$forum_db->prefix.'config SET conf_value=conf_value+'.$akismet_spams.' where conf_name=\'o_akismet_spam_count\' limit 1');
+			]]>
+		</hook>
+		<hook id="mr_confirm_delete_posts_qr_delete_posts">
+			<![CDATA[
+			$akismetquery = array(
+				'SELECT'	=> 'COUNT(s.id)',
+				'FROM'		=> 'posts AS s',
+				'WHERE'		=> 's.is_spam = \'1\' && s.id IN('.implode(',', $posts).')'
+			);
+			$akresult =$forum_db->query_build($akismetquery) or error(__FILE__, __LINE__);
+			list($akismet_spams) = $forum_db->fetch_row($akresult);
+			$forum_db->query('UPDATE '.$forum_db->prefix.'config SET conf_value=conf_value+'.$akismet_spams.' where conf_name=\'o_akismet_spam_count\' limit 1');
+			]]>
+		</hook>
+	</hooks>
+</extension>
