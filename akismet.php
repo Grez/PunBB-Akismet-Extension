@@ -248,14 +248,7 @@ if(!defined('FORUM_PAGE'))
 require FORUM_ROOT.'header.php';
 ?>
 	<div class="main-subhead">
-		<h2 class="hn"><span><?php echo $lang_akismet['Akismet'] ?></span>
-		<?php
-			if($forum_config['o_akismet'] == 1) 
-				echo ' <small>[<a href="'.$base_url.'/admin/settings.php?section=setup" title="'.$lang_akismet['disable'].'">'.$lang_akismet['enabled'].'</a>]</small>';
-			else
-				echo ' <small>[<a href="'.$base_url.'/admin/settings.php?section=setup" title="'.$lang_akismet['enable'].'">'.$lang_akismet['not enabled'].'</a>]</small>';
-		?>	
-		</h2>
+		<h2 class="hn"><span><?php echo $lang_akismet['Akismet'] ?></span></h2>
 	</div>
 	
 	<div class="main-content">

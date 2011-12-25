@@ -12,7 +12,7 @@ $lang_akismet = array(
 	'Setup'							=> 'Akismet Administration',
 	'Enable'						=> 'Enable Akismet',
 	'Key'							=> 'Akismet API Key (Needed)',
-	'Key help'						=> 'You can get yours from <a href="http://wordpress.com/api-keys/">http://wordpress.com/api-keys/</a>.',
+	'Key help'						=> 'You can get yours from <a href="http://akismet.com/wordpress/">http://akismet.com/wordpress/</a>.',
 	'Spam Counts'			=>	'Confirmed Spam Count to date: <strong>%1$s</strong> <dfn title="Incorrectly tagged spam">Ham</dfn> Count to date: <strong>%2$s</strong>',
 
 	'Akismet'						=> 'Akismet Administration',
