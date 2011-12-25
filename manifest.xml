@@ -168,10 +168,10 @@
 				<legend class="group-legend"><strong><?php echo $lang_akismet['Setup'] ?></strong></legend>
 				<div class="sf-set set<?php echo ++$forum_page['item_count'] ?>">
 					<div class="sf-box checkbox">
-						<label for="fld<?php echo $forum_page['fld_count'] ?>">
+						<label for="fld<?php echo ++$forum_page['fld_count'] ?>">
 							<span><?php echo $lang_akismet['Enable'] ?></span>
 						</label>
-						<span class="fld-input"><input type="checkbox" id="fld<?php echo ++$forum_page['fld_count'] ?>" name="form[akismet]" value="1" <?php if ($forum_config['o_akismet'] == 1) echo 'checked="checked" ' ?>/></span>
+						<span class="fld-input"><input type="checkbox" id="fld<?php echo $forum_page['fld_count'] ?>" name="form[akismet]" value="1" <?php if ($forum_config['o_akismet'] == 1) echo 'checked="checked" ' ?>/></span>
 					</div>
 				</div>
 				<div class="sf-set set<?php echo ++$forum_page['item_count'] ?>">
