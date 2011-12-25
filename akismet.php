@@ -1,11 +1,15 @@
 <?php
 if (!defined('FORUM_ROOT'))
     define('FORUM_ROOT', '../../');
+
 require FORUM_ROOT.'include/common.php';
 require FORUM_ROOT.'include/common_admin.php';
+
 $ext_info['path']=FORUM_ROOT.'/extensions/akismet';
+
 if (!$forum_user['is_admmod'])
     message($lang_common['No permission']);
+
 require FORUM_ROOT.'lang/'.$forum_user['language'].'/admin_common.php';
 require FORUM_ROOT.'lang/'.$forum_user['language'].'/common.php';
 
@@ -22,17 +26,13 @@ $forum_page['crumbs'] = array(
     array($lang_admin_common['Forum administration'], forum_link($forum_url['admin_index'])),
     array('Akismet', forum_link($forum_url['akismet']))
 );
-if(version_compare("5", phpversion(), "<="))
-	require_once  $ext_info['path'].'/akismet.php5.class.php';
-elseif(version_compare("5", phpversion(), ">"))
-	require_once  $ext_info['path'].'/akismet.php4.class.php';
-else
-	die("PHP 4 or greater is needed for Akismet extension.");
-	
+
+require_once  $ext_info['path'].'/akismet.php5.class.php';
+
 $forum_page['form_action']=forum_link($forum_url['akismet']);
 
 ob_start();
-if(isset($_GET['id'])){
+if(isset($_GET['id'])) {
 	// from an individual post
 	$pid = preg_replace('/[^0-9]/', '', $_GET['id']);
 	$tid = preg_replace('/[^0-9]/', '', $_GET['topic']);
@@ -44,7 +44,8 @@ if(isset($_GET['id'])){
 	);
 	$akhresult = $forum_db->query_build($akhquery) or error(__FILE__, __LINE__);
 	list($akspam) = $forum_db->fetch_row($akhresult);
-	if($akspam=='0'){
+	if($akspam=='0') {
+
 		//update the records
 		$akismet = new Akismet($base_url, $forum_config['o_akismet_key']);
 		$nakhquery = array(
@@ -72,7 +73,9 @@ if(isset($_GET['id'])){
 		);
 		$retstr=$lang_akismet['Successfully set as spam'];
 		$forum_db->query('UPDATE '.$forum_db->prefix.'config SET conf_value=conf_value+1 where conf_name=\'o_akismet_spam_count\' limit 1');
-	}elseif($akspam=='1'){
+
+	} elseif($akspam=='1') {
+
 		//update the records
 		$query = array(
 			'UPDATE'		=> 'posts',
@@ -81,50 +84,59 @@ if(isset($_GET['id'])){
 		);
 		$retstr=$lang_akismet['Successfully set as not spam'];
 		$forum_db->query('UPDATE '.$forum_db->prefix.'config SET conf_value=conf_value+1 where conf_name=\'o_akismet_ham_count\' limit 1');
+
 	}
+
 	$forum_db->query_build($query) or error(__FILE__, __LINE__);
+
 	// Regenerate the config cache - and why not! 
 	if (!defined('FORUM_CACHE_FUNCTIONS_LOADED'))
 		require FORUM_ROOT.'include/cache.php';
+
 	generate_config_cache();
 	redirect(forum_link($forum_url['topic'], $tid), $retstr);
 }
 
 //akismet form handling
-if(isset($_POST['form_sent'])){
-// Validate CSRF token
+if(isset($_POST['form_sent'])) {
+	
+	// Validate CSRF token
 	if (!isset($_POST['csrf_token']) && (!isset($_GET['csrf_token']) || $_GET['csrf_token'] !== generate_form_token($forum_page['form_action'])))
 		csrf_confirm_form();
-	//deletion
-	if(isset($_POST['delete_posts'])){
-		$del_posts=$_POST['posts'];
+		
+	// Deletion
+	if(isset($_POST['delete_posts'])) {
+
+		$del_posts = $_POST['posts'];
 		echo '<div style="background:#fff;">';
-		foreach($del_posts as $k=>$id){
-			$id = preg_replace('/[^0-9]/', '', $id);
+		foreach($del_posts as $id) {
+
+			$id = intVal($id);
 			$query = array(
-			'SELECT'	=> 'f.id AS fid, f.forum_name, f.moderators, f.redirect_url, fp.post_replies, fp.post_topics, t.id AS tid, t.subject, t.first_post_id, t.closed, p.poster, p.poster_id, p.message, p.hide_smilies, p.posted',
-			'FROM'		=> 'posts AS p',
-			'JOINS'		=> array(
-				array(
-					'INNER JOIN'	=> 'topics AS t',
-					'ON'			=> 't.id=p.topic_id'
+				'SELECT'	=> 'f.id AS fid, f.forum_name, f.moderators, f.redirect_url, fp.post_replies, fp.post_topics, t.id AS tid, t.subject, t.first_post_id, t.closed, p.poster, p.poster_id, p.message, p.hide_smilies, p.posted',
+				'FROM'		=> 'posts AS p',
+				'JOINS'		=> array(
+					array(
+						'INNER JOIN'	=> 'topics AS t',
+						'ON'			=> 't.id=p.topic_id'
+					),
+					array(
+						'INNER JOIN'	=> 'forums AS f',
+						'ON'			=> 'f.id=t.forum_id'
+					),
+					array(
+						'LEFT JOIN'		=> 'forum_perms AS fp',
+						'ON'			=> '(fp.forum_id=f.id AND fp.group_id='.$forum_user['g_id'].')'
+					)
 				),
-				array(
-					'INNER JOIN'	=> 'forums AS f',
-					'ON'			=> 'f.id=t.forum_id'
-				),
-				array(
-					'LEFT JOIN'		=> 'forum_perms AS fp',
-					'ON'			=> '(fp.forum_id=f.id AND fp.group_id='.$forum_user['g_id'].')'
-				)
-			),
-			'WHERE'		=> '(fp.read_forum IS NULL OR fp.read_forum=1) AND p.id='.$id
+				'WHERE'		=> '(fp.read_forum IS NULL OR fp.read_forum=1) AND p.id='.$id
 			);
 			$result = $forum_db->query_build($query) or error(__FILE__, __LINE__);
 			if (!$forum_db->num_rows($result))
 				message($lang_common['Bad request']);
 
 			$cur_post = $forum_db->fetch_assoc($result);
+
 			// Sort out who the moderators are and if we are currently a moderator (or an admin)
 			$mods_array = ($cur_post['moderators'] != '') ? unserialize($cur_post['moderators']) : array();
 			$forum_page['is_admmod'] = ($forum_user['g_id'] == FORUM_ADMIN || ($forum_user['g_moderator'] == '1' && array_key_exists($forum_user['username'], $mods_array))) ? true : false;
@@ -139,27 +151,29 @@ if(isset($_POST['form_sent'])){
 				!$forum_page['is_admmod'])
 				message($lang_common['No permission']);
 
-
-
-			if ($cur_post['is_topic']){
-				// Delete the topic and all of it's posts
+			if ($cur_post['is_topic'])
 				delete_topic($cur_post['tid'], $cur_post['fid']);
-			}else{
-				// Delete just this one post
+			else
 				delete_post($id, $cur_post['tid'], $cur_post['fid']);
-			}
+
 		}
+
 		// Regenerate the config cache - and why not! 
 		if (!defined('FORUM_CACHE_FUNCTIONS_LOADED'))
 			require FORUM_ROOT.'include/cache.php';
+
 		generate_config_cache();
 		redirect($base_url.'/extensions/akismet/akismet.php', $lang_akismet['Spam Deleted']);
+
 	}
+
 	//not spam = ham
-	if(isset($_POST['ham_posts'])){
+	if(isset($_POST['ham_posts'])) {
+
 		$ham_posts=$_POST['posts'];
-		foreach($ham_posts as $k=>$hampid){
-			$pid = preg_replace('/[^0-9]/', '', $hampid);
+		foreach($ham_posts as $hampid) {
+
+			$pid = intVal($hampid);
 			
 			//akismet submit ham
 
@@ -193,16 +207,21 @@ if(isset($_POST['form_sent'])){
 				'WHERE'			=> 'id=\''.$pid.'\''
 			);
 			$forum_db->query_build($query) or error(__FILE__, __LINE__);
-
 			$forum_db->query('UPDATE '.$forum_db->prefix.'config SET conf_value=conf_value+1 where conf_name=\'o_akismet_ham_count\' limit 1');
+
 		}
+
 		// Regenerate the config cache - and why not!
 		if (!defined('FORUM_CACHE_FUNCTIONS_LOADED'))
 			require FORUM_ROOT.'include/cache.php';
+
 		generate_config_cache();
 		redirect($base_url.'/extensions/akismet/akismet.php', $lang_akismet['Successfully set as not spam']);
+
 	}
+
 }
+
 $query = array(
 	'SELECT'	=> 't.subject, u.email, p.id, p.poster, p.poster_id, p.poster_ip, p.poster_email AS guest_email, p.message, p.posted, p.topic_id',
 	'FROM'		=> 'posts AS p',
@@ -219,12 +238,14 @@ $query = array(
 	'WHERE'		=> 'is_spam = \'1\''
 );
 $result = $forum_db->query_build($query) or error(__FILE__, __LINE__);
+
 if(!defined('FORUM_PAGE_SECTION'))
 	define('FORUM_PAGE_SECTION', 'management');
+
 if(!defined('FORUM_PAGE'))
 	define('FORUM_PAGE', 'admin-akismet');
-require FORUM_ROOT.'header.php';
 
+require FORUM_ROOT.'header.php';
 ?>
 	<div class="main-subhead">
 		<h2 class="hn"><span><?php echo $lang_akismet['Akismet'] ?></span>
@@ -282,8 +303,8 @@ else
 			<input type="hidden" name="csrf_token" value="<?php echo generate_form_token($forum_page['form_action']) ?>" />
 		</div>
 <?php
-	while ($cur_post = $forum_db->fetch_assoc($result))
-	{
+	while ($cur_post = $forum_db->fetch_assoc($result)) {
+
 	/* have to check each for the topic individually - sadly */
 	$tquery = array(
 			'SELECT'	=> 't.subject, t.poster, t.first_post_id, t.posted, t.num_replies',
@@ -291,8 +312,10 @@ else
 			'WHERE'		=> 't.id='.$cur_post['topic_id'].' AND t.moved_to IS NULL'
 		);
 	$tresult = $forum_db->query_build($tquery) or error(__FILE__, __LINE__);
+
 	if (!$forum_db->num_rows($result))
 		message($lang_common['Bad request']);
+
 	$cur_topic = $forum_db->fetch_assoc($tresult);
 
 	++$forum_page['item_count'];
@@ -313,6 +336,7 @@ else
 
 	if (($forum_page['item_count']) == $forum_page['finish_at'])
 		$forum_page['item_status']['lastpost'] = 'lastpost';
+
 	if ($cur_post['id'] == $cur_topic['first_post_id'])
 		$forum_page['item_status']['topicpost'] = 'topicpost';
 	else
@@ -324,7 +348,7 @@ else
 			<h3 class="hn post-ident"><?php echo implode(' ', $forum_page['post_ident']) ?></h3>
 			<p class="item-select"><input type="checkbox" id="fld<?php echo $cur_post['id']; ?>" name="posts[]" value="<?php echo $cur_post['id']; ?>" /> <label for="fld<?php echo $cur_post['id']; ?>"><?php echo $lang_akismet['Select post'].' '.forum_number_format($forum_page['item_count']); ?></label></p>
 		<?php
-		if(isset($forum_page['item_status']['topicpost'])){
+		if(isset($forum_page['item_status']['topicpost'])) {
 			//topics
 		?>
 			<input type="hidden" name="topicposts[]" value="<?php echo $cur_post['id']; ?>" />
